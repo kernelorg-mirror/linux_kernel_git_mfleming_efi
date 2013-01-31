@@ -900,6 +900,55 @@ static struct inode *efivarfs_get_inode(struct super_block *sb,
 	return inode;
 }
 
+/*
+ * Return 1 if 'str' is a valid efivarfs filename of the form,
+ *
+ *	VariableName-12345678-1234-1234-1234-1234567891bc
+ */
+static int efivarfs_valid_name(const char *str, int len)
+{
+	const char *s;
+	int i, j;
+	int ranges[2][5] = {
+		{ 0, 9, 14, 19, 24 },
+		{ 8, 13, 18, 23, 36 }
+	};
+
+	/*
+	 * We need a GUID, plus at least one letter for the variable name,
+	 * plus the '-' separator
+	 */
+	if (len < GUID_LEN + 2)
+		return 0;
+
+	s = strchr(str, '-');
+	if (!s)
+		return 0;
+
+	s++;			/* Skip '-' */
+
+	/* Ensure we have enough characters for a GUID */
+	if (len - (s - str) != GUID_LEN)
+		return 0;
+
+	/*
+	 * Validate that 's' is of the correct format, e.g.
+	 *
+	 *	12345678-1234-1234-1234-123456789abc
+	 */
+	for (i = 0; i < 5; i++) {
+		for (j = ranges[0][i]; j < ranges[1][i]; j++) {
+			if (hex_to_bin(s[j]) < 0)
+				return 0;
+		}
+
+		if (j < GUID_LEN && s[j] != '-')
+			return 0;
+	}
+
+	return 1;
+}
+
 static void efivarfs_hex_to_guid(const char *str, efi_guid_t *guid)
 {
 	guid->b[0] = hex_to_bin(str[6]) << 4 | hex_to_bin(str[7]);
@@ -928,11 +977,7 @@ static int efivarfs_create(struct inode *dir, struct dentry *dentry,
 	struct efivar_entry *var;
 	int namelen, i = 0, err = 0;
 
-	/*
-	 * We need a GUID, plus at least one letter for the variable name,
-	 * plus the '-' separator
-	 */
-	if (dentry->d_name.len < GUID_LEN + 2)
+	if (!efivarfs_valid_name(dentry->d_name.name, dentry->d_name.len))
 		return -EINVAL;
 
 	inode = efivarfs_get_inode(dir->i_sb, dir, mode, 0);
