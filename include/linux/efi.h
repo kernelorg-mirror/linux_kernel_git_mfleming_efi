@@ -663,6 +663,12 @@ static inline int efi_enabled(int facility)
 				EFI_VARIABLE_TIME_BASED_AUTHENTICATED_WRITE_ACCESS | \
 				EFI_VARIABLE_APPEND_WRITE)
 /*
+ * Length of a GUID string (strlen("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"))
+ * not including trailing NUL
+ */
+#define EFI_VARIABLE_GUID_LEN 36
+
+/*
  * The type of search to perform when calling boottime->locate_handle
  */
 #define EFI_LOCATE_ALL_HANDLES			0
@@ -719,6 +725,23 @@ static inline void memrange_efi_to_native(u64 *addr, u64 *npages)
 	*addr &= PAGE_MASK;
 }
 
+/* Return the number of unicode characters in data */
+static inline unsigned long
+utf16_strnlen(efi_char16_t *s, size_t maxlength)
+{
+	unsigned long length = 0;
+
+	while (*s++ != 0 && length < maxlength)
+		length++;
+	return length;
+}
+
+static inline unsigned long
+utf16_strlen(efi_char16_t *s)
+{
+	return utf16_strnlen(s, ~0UL);
+}
+
 #if defined(CONFIG_EFI_VARS) || defined(CONFIG_EFI_VARS_MODULE)
 /*
  * EFI Variable support.
@@ -753,10 +776,38 @@ struct efivars {
 	struct pstore_info efi_pstore_info;
 };
 
+/*
+ * The maximum size of VariableName + Data = 1024
+ * Therefore, it's reasonable to save that much
+ * space in each part of the structure,
+ * and we use a page for reading/writing.
+ */
+
+struct efi_variable {
+	efi_char16_t  VariableName[1024/sizeof(efi_char16_t)];
+	efi_guid_t    VendorGuid;
+	unsigned long DataSize;
+	__u8          Data[1024];
+	efi_status_t  Status;
+	__u32         Attributes;
+} __attribute__((packed));
+
+struct efivar_entry {
+	struct efivars *efivars;
+	struct efi_variable var;
+	struct list_head list;
+	struct kobject kobj;
+};
+
 int register_efivars(struct efivars *efivars,
 		     const struct efivar_operations *ops,
 		     struct kobject *parent_kobj);
 void unregister_efivars(struct efivars *efivars);
+
+int efivar_list_add(struct efivars *efivars, char *name,
+		    struct efivar_entry *entry);
+void efivar_list_del_unlock(struct efivar_entry *entry);
+bool efivar_validate(struct efi_variable *var, u8 *data, unsigned long len);
 
 #endif /* CONFIG_EFI_VARS */
 
