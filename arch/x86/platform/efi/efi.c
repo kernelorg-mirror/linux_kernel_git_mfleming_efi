@@ -41,6 +41,7 @@
 #include <linux/io.h>
 #include <linux/reboot.h>
 #include <linux/bcd.h>
+#include <linux/dmi.h>
 
 #include <asm/setup.h>
 #include <asm/efi.h>
@@ -1001,6 +1002,23 @@ u64 efi_mem_attributes(unsigned long phys_addr)
 }
 
 /*
+ * WARNING: Only add IDs here if you are absolutely positive that writing
+ * arbitrary amounts of data to the EFI variable store will not brick your
+ * machine.
+ */
+static bool efi_skip_varstore_limit(void)
+{
+	const char *board_vendor = dmi_get_system_info(DMI_BOARD_VENDOR);
+	const char *bios_vendor = dmi_get_system_info(DMI_BIOS_VENDOR);
+
+	if (!strcmp("American Megatrends Inc.", bios_vendor) &&
+	    !strcmp("ASUSTeK Computer INC.", board_vendor))
+		return true;
+
+	return false;
+}
+
+/*
  * Some firmware has serious problems when using more than 50% of the EFI
  * variable store, i.e. it triggers bugs in the wear-levelling algorithms and
  * can brick machines. Ensure that we never use more than this safe limit.
@@ -1011,6 +1029,16 @@ efi_status_t efi_query_variable_store(u32 attributes, unsigned long size)
 {
 	efi_status_t status;
 	u64 storage_size, remaining_size, max_size;
+
+	/*
+	 * Not everybody needs to abide by the 50% limit. For example some ASUS
+	 * machines require writing more than that to initiate garbage
+	 * collection of deleted variables, and to make matters worse on those
+	 * machines QueryVariableInfo() does not return accurate values, so
+	 * just skip the checks entirely.
+	 */
+	if (efi_skip_varstore_limit())
+		return EFI_SUCCESS;
 
 	status = efi.query_variable_info(attributes, &storage_size,
 					 &remaining_size, &max_size);
