@@ -36,4 +36,13 @@ config EFI_VARS_PSTORE_DEFAULT_DISABLE
 	  backend for pstore by default. This setting can be overridden
 	  using the efivars module's pstore_disable parameter.
 
+config EFI_CAPSULE
+	bool "EFI capsule support"
+	help
+	  This option enables the use of the EFI capsule update mechanism,
+	  which is used to pass binary blobs to the firmware, e.g. for
+	  firmware upgrades.
+
+	  If unsure, say N.
+
 endmenu

@@ -19,7 +19,7 @@
 #include <linux/device.h>
 #include <linux/efi.h>
 
-static struct kobject *efi_kobj;
+struct kobject *efi_kobj;
 static struct kobject *efivars_kobj;
 
 /*

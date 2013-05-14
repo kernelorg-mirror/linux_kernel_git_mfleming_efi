@@ -114,6 +114,13 @@ typedef struct {
 } efi_capsule_header_t;
 
 /*
+ * EFI capsule flags
+ */
+#define EFI_CAPSULE_PERSIST_ACROSS_RESET	0x00010000
+#define EFI_CAPSULE_POPULATE_SYSTEM_TABLE	0x00020000
+#define EFI_CAPSULE_INITIATE_RESET		0x00040000
+
+/*
  * Allocation types for calls to boottime->allocate_pages.
  */
 #define EFI_ALLOCATE_ANY_PAGES		0
@@ -820,6 +827,8 @@ struct efivar_entry {
 
 extern struct list_head efivar_sysfs_list;
 
+extern struct kobject *efi_kobj;
+
 static inline void
 efivar_unregister(struct efivar_entry *var)
 {
@@ -875,5 +884,14 @@ void efivar_run_worker(void);
 int efivars_sysfs_init(void);
 
 #endif /* CONFIG_EFI_VARS */
+
+#ifdef CONFIG_EFI_CAPSULE
+extern bool efi_capsule_pending(int *reset_type);
+#else
+static inline bool efi_capsule_pending(int *reset_type)
+{
+	return false;
+}
+#endif /* CONFIG_EFI_CAPSULE */
 
 #endif /* _LINUX_EFI_H */
