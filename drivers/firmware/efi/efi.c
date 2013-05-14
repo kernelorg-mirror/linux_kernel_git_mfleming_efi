@@ -35,7 +35,7 @@ struct efi __read_mostly efi = {
 };
 EXPORT_SYMBOL(efi);
 
-static struct kobject *efi_kobj;
+struct kobject *efi_kobj;
 static struct kobject *efivars_kobj;
 
 /*
