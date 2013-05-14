@@ -21,6 +21,7 @@
 #include <linux/device.h>
 #include <linux/efi.h>
 #include <linux/io.h>
+#include <linux/slab.h>
 
 struct efi __read_mostly efi = {
 	.mps        = EFI_INVALID_TABLE_ADDR,
@@ -208,19 +209,55 @@ static __init int match_config_table(efi_guid_t *guid,
 	u8 str[EFI_VARIABLE_GUID_LEN + 1];
 	int i;
 
-	if (table_types) {
-		efi_guid_unparse(guid, str);
+	if (!table_types)
+		return 0;
 
-		for (i = 0; efi_guidcmp(table_types[i].guid, NULL_GUID); i++) {
-			efi_guid_unparse(&table_types[i].guid, str);
+	efi_guid_unparse(guid, str);
 
-			if (!efi_guidcmp(*guid, table_types[i].guid)) {
-				*(table_types[i].ptr) = table;
-				pr_cont(" %s=0x%lx ",
-					table_types[i].name, table);
-				return 1;
-			}
+	for (i = 0; efi_guidcmp(table_types[i].guid, NULL_GUID); i++) {
+		efi_guid_unparse(&table_types[i].guid, str);
+
+		if (!efi_guidcmp(*guid, table_types[i].guid)) {
+			*(table_types[i].ptr) = table;
+			pr_cont(" %s=0x%lx ",
+				table_types[i].name, table);
+			return 1;
 		}
+	}
+
+	return 0;
+}
+
+static efi_guid_t capsule_guids[] = {
+	LINUX_EFI_CRASH_GUID,
+	LINUX_EFI_BLK_DEV_GUID,
+	NULL_GUID,
+};
+
+/*
+ * Search all list of architecture independent config tables for a match
+ * with 'guid'.
+ */
+static __init int match_config_tables(efi_guid_t *guid, unsigned long table)
+{
+	int i;
+
+	/* Search for match in common EFI tables */
+	if (match_config_table(guid, table, common_tables))
+		return 1;
+
+	/*
+	 * Search for Linux-specific capsule guids. These guids denote
+	 * capsule blobs that we've created on a previous boot and have
+	 * been passed back to us via the EFI system table.
+	 */
+	for (i = 0; efi_guidcmp(capsule_guids[i], NULL_GUID); i++) {
+		if (efi_guidcmp(*guid, capsule_guids[i]))
+			continue;
+
+		efi.capsules[i] = table;
+
+		return 1;
 	}
 
 	return 0;
@@ -271,8 +308,8 @@ int __init efi_config_init(efi_config_table_type_t *arch_tables)
 			table = ((efi_config_table_32_t *)tablep)->table;
 		}
 
-		if (!match_config_table(&guid, table, common_tables))
-			match_config_table(&guid, table, arch_tables);
+		if (!match_config_table(&guid, table, arch_tables))
+			match_config_tables(&guid, table);
 
 		tablep += sz;
 	}

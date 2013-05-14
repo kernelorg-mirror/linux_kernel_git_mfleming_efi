@@ -36,6 +36,42 @@ config EFI_VARS_PSTORE_DEFAULT_DISABLE
 	  backend for pstore by default. This setting can be overridden
 	  using the efivars module's pstore_disable parameter.
 
+config EFI_CAPSULE_PSTORE
+	bool "EFI capsule pstore backend"
+	depends on EFI && PSTORE
+	help
+	  The EFI capsule mechanism can be used to store crash dumps and
+	  function tracing data by passing the data to the firmware, which
+	  will be preserved across a reboot.
+
+	  It should be noted that enabling this opton will pass a capsule
+	  to the firmware on every boot. Some firmware will not allow a
+	  user to enter the BIOS setup when a capsule has been registered
+	  on the previous boot.
+
+	  Many EFI machines have buggy implementations of the UpdateCapsule()
+	  runtime service. This option will enable code that may not function
+	  correctly with your firmware.
+
+	  If unsure, say N.
+
+config EFI_CAPSULE_BLK_DEV
+	tristate "EFI capsule block device"
+	depends on EFI
+	help
+	  This option uses the EFI capsule mechanism to reserve regions
+	  for use as block devices, which allows you to create file systems
+	  on them, read/write files, etc. The major advantage is that any
+	  data you create on the block device will be preserved across a
+	  reboot.
+
+	  If unsure, say N.
+
+config EFI_CAPSULE_BLK_DEV_SIZE
+	int "Default EFI capsule size (Mbytes)"
+	depends on EFI_CAPSULE_BLK_DEV
+	default "8"
+
 endmenu
 
 config UEFI_CPER

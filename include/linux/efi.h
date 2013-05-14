@@ -117,6 +117,13 @@ typedef struct {
 } efi_capsule_header_t;
 
 /*
+ * EFI capsule flags
+ */
+#define EFI_CAPSULE_PERSIST_ACROSS_RESET	0x00010000
+#define EFI_CAPSULE_POPULATE_SYSTEM_TABLE	0x00020000
+#define EFI_CAPSULE_INITIATE_RESET		0x00040000
+
+/*
  * Allocation types for calls to boottime->allocate_pages.
  */
 #define EFI_ALLOCATE_ANY_PAGES		0
@@ -395,6 +402,9 @@ typedef efi_status_t efi_query_variable_store_t(u32 attributes, unsigned long si
 #define EFI_FILE_SYSTEM_GUID \
     EFI_GUID(  0x964e5b22, 0x6459, 0x11d2, 0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b )
 
+#define LINUX_EFI_BLK_DEV_GUID \
+    EFI_GUID(  0xe7db9873, 0x6ac3, 0x4897, 0x53, 0xa2, 0xac, 0x27, 0xa2, 0xb3, 0x6b, 0x42 )
+
 typedef struct {
 	efi_guid_t guid;
 	u64 table;
@@ -543,6 +553,17 @@ typedef struct _efi_file_io_interface {
 #define EFI_INVALID_TABLE_ADDR		(~0UL)
 
 /*
+ * This is the in-kernel representation of an EFI capsule passed
+ * via the EFI System Table. It has no analogy in the EFI spec.
+ */
+struct efi_capsule {
+	unsigned long addr;
+	efi_guid_t guid;
+};
+
+#define EFI_LINUX_CAPSULES_NR	2
+
+/*
  * All runtime access to EFI goes through this structure:
  */
 extern struct efi {
@@ -571,6 +592,12 @@ extern struct efi {
 	efi_reset_system_t *reset_system;
 	efi_set_virtual_address_map_t *set_virtual_address_map;
 	struct efi_memory_map *memmap;
+
+	/*
+	 * Collect pointers to EFI capsules that were passed via the
+	 * EFI System Table on boot.
+	 */
+	unsigned long capsules[EFI_LINUX_CAPSULES_NR];
 } efi;
 
 static inline int
@@ -908,5 +935,16 @@ int efivars_sysfs_init(void);
 #define EFIVARS_DATA_SIZE_MAX 1024
 
 #endif /* CONFIG_EFI_VARS */
+extern efi_capsule_header_t *
+efi_capsule_build(efi_guid_t guid, size_t size);
+extern efi_capsule_header_t **
+efi_capsule_lookup(efi_guid_t guid, uint32_t *nr_found);
 
+extern bool efi_capsule_pending(int *reset_type);
+
+extern int efi_capsule_supported(efi_guid_t guid, u32 flags,
+				 size_t size, int *reset);
+
+extern int efi_capsule_update(efi_capsule_header_t *capsule,
+			      struct page **pages);
 #endif /* _LINUX_EFI_H */

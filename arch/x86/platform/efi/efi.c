@@ -273,7 +273,6 @@ static void virt_efi_reset_system(int reset_type,
 				  efi_char16_t *data)
 {
 	unsigned long flags;
-	bool nmi = in_nmi();
 
 	spin_lock_irqsave(&efi_runtime_lock, flags);
 	efi_call_virt4(reset_system, reset_type, status,
