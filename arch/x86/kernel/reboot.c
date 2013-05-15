@@ -497,11 +497,15 @@ static void native_machine_emergency_restart(void)
 			break;
 
 		case BOOT_EFI:
-			if (efi_enabled(EFI_RUNTIME_SERVICES))
-				efi.reset_system(reboot_mode == REBOOT_WARM ?
-						 EFI_RESET_WARM :
-						 EFI_RESET_COLD,
-						 EFI_SUCCESS, 0, NULL);
+			if (efi_enabled(EFI_RUNTIME_SERVICES)) {
+				int mode = EFI_RESET_COLD;
+
+				if (reboot_mode == REBOOT_WARM)
+					mode = EFI_RESET_WARM;
+
+				efi_reboot(mode);
+			}
+
 			reboot_type = BOOT_KBD;
 			break;
 
