@@ -283,6 +283,7 @@ typedef struct {
 #define EFI_RESET_COLD 0
 #define EFI_RESET_WARM 1
 #define EFI_RESET_SHUTDOWN 2
+#define EFI_RESET_PLATFORM_SPECIFIC 3
 
 /*
  * EFI Runtime Services table
@@ -591,6 +592,7 @@ extern void efi_map_pal_code (void);
 extern void efi_memmap_walk (efi_freemem_callback_t callback, void *arg);
 extern void efi_gettimeofday (struct timespec *ts);
 extern void efi_enter_virtual_mode (void);	/* switch EFI to virtual mode, if possible */
+extern void efi_reboot(int mode);
 #ifdef CONFIG_X86
 extern void efi_late_init(void);
 extern void efi_free_boot_services(void);
