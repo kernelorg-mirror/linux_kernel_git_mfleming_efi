@@ -45,4 +45,11 @@ config EFI_CAPSULE
 
 	  If unsure, say N.
 
+config EFI_CAPSULE_PSTORE
+	bool "EFI capsule pstore backend"
+	depends on EFI_CAPSULE && PSTORE
+	help
+	  The EFI capsule mechanism can be used to store crash dumps and
+	  function tracing data.
+
 endmenu
