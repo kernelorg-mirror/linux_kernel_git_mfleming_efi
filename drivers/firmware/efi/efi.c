@@ -35,6 +35,14 @@ struct efi __read_mostly efi = {
 };
 EXPORT_SYMBOL(efi);
 
+/*
+ * 'efi_runtime_lock' protects against concurrently invoking the EFI
+ * runtime services, many of which are not reentrant.
+ *
+ * You must disable interrupts when acquiring this lock.
+ */
+DEFINE_SPINLOCK(efi_runtime_lock);
+
 static struct kobject *efi_kobj;
 static struct kobject *efivars_kobj;
 

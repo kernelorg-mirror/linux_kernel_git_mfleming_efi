@@ -814,6 +814,8 @@ struct efi_simple_text_output_protocol {
 
 extern struct list_head efivar_sysfs_list;
 
+extern spinlock_t efi_runtime_lock;
+
 static inline void
 efivar_unregister(struct efivar_entry *var)
 {

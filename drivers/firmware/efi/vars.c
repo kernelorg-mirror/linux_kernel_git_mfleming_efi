@@ -376,7 +376,8 @@ int efivar_init(int (*func)(efi_char16_t *, efi_guid_t, unsigned long, void *),
 		return -ENOMEM;
 	}
 
-	spin_lock_irq(&__efivars->lock);
+	if (atomic)
+		spin_lock_irq(&__efivars->lock);
 
 	/*
 	 * Per EFI spec, the maximum storage allocated for both
@@ -391,9 +392,6 @@ int efivar_init(int (*func)(efi_char16_t *, efi_guid_t, unsigned long, void *),
 						&vendor_guid);
 		switch (status) {
 		case EFI_SUCCESS:
-			if (!atomic)
-				spin_unlock_irq(&__efivars->lock);
-
 			variable_name_size = var_name_strnsize(variable_name,
 							       variable_name_size);
 
@@ -409,8 +407,6 @@ int efivar_init(int (*func)(efi_char16_t *, efi_guid_t, unsigned long, void *),
 			    variable_is_present(variable_name, &vendor_guid, head)) {
 				dup_variable_bug(variable_name, &vendor_guid,
 						 variable_name_size);
-				if (!atomic)
-					spin_lock_irq(&__efivars->lock);
 
 				status = EFI_NOT_FOUND;
 				break;
@@ -419,9 +415,6 @@ int efivar_init(int (*func)(efi_char16_t *, efi_guid_t, unsigned long, void *),
 			err = func(variable_name, vendor_guid, variable_name_size, data);
 			if (err)
 				status = EFI_NOT_FOUND;
-
-			if (!atomic)
-				spin_lock_irq(&__efivars->lock);
 
 			break;
 		case EFI_NOT_FOUND:
@@ -435,7 +428,8 @@ int efivar_init(int (*func)(efi_char16_t *, efi_guid_t, unsigned long, void *),
 
 	} while (status != EFI_NOT_FOUND);
 
-	spin_unlock_irq(&__efivars->lock);
+	if (atomic)
+		spin_unlock_irq(&__efivars->lock);
 
 	kfree(variable_name);
 
@@ -710,11 +704,8 @@ int efivar_entry_size(struct efivar_entry *entry, unsigned long *size)
 
 	*size = 0;
 
-	spin_lock_irq(&__efivars->lock);
 	status = ops->get_variable(entry->var.VariableName,
 				   &entry->var.VendorGuid, NULL, size, NULL);
-	spin_unlock_irq(&__efivars->lock);
-
 	if (status != EFI_BUFFER_TOO_SMALL)
 		return efi_status_to_err(status);
 
@@ -762,11 +753,9 @@ int efivar_entry_get(struct efivar_entry *entry, u32 *attributes,
 	const struct efivar_operations *ops = __efivars->ops;
 	efi_status_t status;
 
-	spin_lock_irq(&__efivars->lock);
 	status = ops->get_variable(entry->var.VariableName,
 				   &entry->var.VendorGuid,
 				   attributes, size, data);
-	spin_unlock_irq(&__efivars->lock);
 
 	return efi_status_to_err(status);
 }

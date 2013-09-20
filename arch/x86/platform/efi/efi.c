@@ -117,7 +117,11 @@ static efi_status_t virt_efi_get_time(efi_time_t *tm, efi_time_cap_t *tc)
 	efi_status_t status;
 
 	spin_lock_irqsave(&rtc_lock, flags);
+
+	spin_lock(&efi_runtime_lock);
 	status = efi_call_virt2(get_time, tm, tc);
+	spin_unlock(&efi_runtime_lock);
+
 	spin_unlock_irqrestore(&rtc_lock, flags);
 	return status;
 }
@@ -128,7 +132,11 @@ static efi_status_t virt_efi_set_time(efi_time_t *tm)
 	efi_status_t status;
 
 	spin_lock_irqsave(&rtc_lock, flags);
+
+	spin_lock(&efi_runtime_lock);
 	status = efi_call_virt1(set_time, tm);
+	spin_unlock(&efi_runtime_lock);
+
 	spin_unlock_irqrestore(&rtc_lock, flags);
 	return status;
 }
@@ -141,8 +149,12 @@ static efi_status_t virt_efi_get_wakeup_time(efi_bool_t *enabled,
 	efi_status_t status;
 
 	spin_lock_irqsave(&rtc_lock, flags);
+
+	spin_lock(&efi_runtime_lock);
 	status = efi_call_virt3(get_wakeup_time,
 				enabled, pending, tm);
+	spin_unlock(&efi_runtime_lock);
+
 	spin_unlock_irqrestore(&rtc_lock, flags);
 	return status;
 }
@@ -153,8 +165,12 @@ static efi_status_t virt_efi_set_wakeup_time(efi_bool_t enabled, efi_time_t *tm)
 	efi_status_t status;
 
 	spin_lock_irqsave(&rtc_lock, flags);
+
+	spin_lock(&efi_runtime_lock);
 	status = efi_call_virt2(set_wakeup_time,
 				enabled, tm);
+	spin_unlock(&efi_runtime_lock);
+
 	spin_unlock_irqrestore(&rtc_lock, flags);
 	return status;
 }
@@ -165,17 +181,31 @@ static efi_status_t virt_efi_get_variable(efi_char16_t *name,
 					  unsigned long *data_size,
 					  void *data)
 {
-	return efi_call_virt5(get_variable,
-			      name, vendor, attr,
-			      data_size, data);
+	unsigned long flags;
+	efi_status_t status;
+
+	spin_lock_irqsave(&efi_runtime_lock, flags);
+	status = efi_call_virt5(get_variable,
+				name, vendor, attr,
+				data_size, data);
+	spin_unlock_irqrestore(&efi_runtime_lock, flags);
+
+	return status;
 }
 
 static efi_status_t virt_efi_get_next_variable(unsigned long *name_size,
 					       efi_char16_t *name,
 					       efi_guid_t *vendor)
 {
-	return efi_call_virt3(get_next_variable,
-			      name_size, name, vendor);
+	unsigned long flags;
+	efi_status_t status;
+
+	spin_lock_irqsave(&efi_runtime_lock, flags);
+	status = efi_call_virt3(get_next_variable,
+				name_size, name, vendor);
+	spin_unlock_irqrestore(&efi_runtime_lock, flags);
+
+	return status;
 }
 
 static efi_status_t virt_efi_set_variable(efi_char16_t *name,
@@ -184,9 +214,21 @@ static efi_status_t virt_efi_set_variable(efi_char16_t *name,
 					  unsigned long data_size,
 					  void *data)
 {
-	return efi_call_virt5(set_variable,
-			      name, vendor, attr,
-			      data_size, data);
+	unsigned long flags;
+	efi_status_t status;
+	bool nmi = in_nmi();
+
+	if (!nmi)
+		spin_lock_irqsave(&efi_runtime_lock, flags);
+
+	status = efi_call_virt5(set_variable,
+				name, vendor, attr,
+				data_size, data);
+
+	if (!nmi)
+		spin_unlock_irqrestore(&efi_runtime_lock, flags);
+
+	return status;
 }
 
 static efi_status_t virt_efi_query_variable_info(u32 attr,
@@ -194,16 +236,35 @@ static efi_status_t virt_efi_query_variable_info(u32 attr,
 						 u64 *remaining_space,
 						 u64 *max_variable_size)
 {
+	unsigned long flags;
+	efi_status_t status;
+	bool nmi = in_nmi();
+
 	if (efi.runtime_version < EFI_2_00_SYSTEM_TABLE_REVISION)
 		return EFI_UNSUPPORTED;
 
-	return efi_call_virt4(query_variable_info, attr, storage_space,
-			      remaining_space, max_variable_size);
+	if (!nmi)
+		spin_lock_irqsave(&efi_runtime_lock, flags);
+
+	status = efi_call_virt4(query_variable_info, attr, storage_space,
+				remaining_space, max_variable_size);
+
+	if (!nmi)
+		spin_unlock_irqrestore(&efi_runtime_lock, flags);
+
+	return status;
 }
 
 static efi_status_t virt_efi_get_next_high_mono_count(u32 *count)
 {
-	return efi_call_virt1(get_next_high_mono_count, count);
+	unsigned long flags;
+	efi_status_t status;
+
+	spin_lock_irqsave(&efi_runtime_lock, flags);
+	status = efi_call_virt1(get_next_high_mono_count, count);
+	spin_unlock_irqrestore(&efi_runtime_lock, flags);
+
+	return status;
 }
 
 static void virt_efi_reset_system(int reset_type,
@@ -211,18 +272,30 @@ static void virt_efi_reset_system(int reset_type,
 				  unsigned long data_size,
 				  efi_char16_t *data)
 {
+	unsigned long flags;
+	bool nmi = in_nmi();
+
+	spin_lock_irqsave(&efi_runtime_lock, flags);
 	efi_call_virt4(reset_system, reset_type, status,
 		       data_size, data);
+	spin_unlock_irqrestore(&efi_runtime_lock, flags);
 }
 
 static efi_status_t virt_efi_update_capsule(efi_capsule_header_t **capsules,
 					    unsigned long count,
 					    unsigned long sg_list)
 {
+	unsigned long flags;
+	efi_status_t status;
+
 	if (efi.runtime_version < EFI_2_00_SYSTEM_TABLE_REVISION)
 		return EFI_UNSUPPORTED;
 
-	return efi_call_virt3(update_capsule, capsules, count, sg_list);
+	spin_lock_irqsave(&efi_runtime_lock, flags);
+	status = efi_call_virt3(update_capsule, capsules, count, sg_list);
+	spin_unlock_irqrestore(&efi_runtime_lock, flags);
+
+	return status;
 }
 
 static efi_status_t virt_efi_query_capsule_caps(efi_capsule_header_t **capsules,
@@ -230,11 +303,18 @@ static efi_status_t virt_efi_query_capsule_caps(efi_capsule_header_t **capsules,
 						u64 *max_size,
 						int *reset_type)
 {
+	unsigned long flags;
+	efi_status_t status;
+
 	if (efi.runtime_version < EFI_2_00_SYSTEM_TABLE_REVISION)
 		return EFI_UNSUPPORTED;
 
-	return efi_call_virt4(query_capsule_caps, capsules, count, max_size,
-			      reset_type);
+	spin_lock_irqsave(&efi_runtime_lock, flags);
+	status = efi_call_virt4(query_capsule_caps, capsules, count, max_size,
+				reset_type);
+	spin_unlock_irqrestore(&efi_runtime_lock, flags);
+
+	return status;
 }
 
 static efi_status_t __init phys_efi_set_virtual_address_map(

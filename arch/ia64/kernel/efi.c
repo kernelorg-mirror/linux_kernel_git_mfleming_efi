@@ -56,7 +56,21 @@ extern efi_status_t efi_call_phys (void *, ...);
 static efi_runtime_services_t *runtime;
 static u64 mem_limit = ~0UL, max_addr = ~0UL, min_addr = 0UL;
 
-#define efi_call_virt(f, args...)	(*(f))(args)
+#define efi_call_virt(f, args...)					\
+({									\
+	unsigned long __flags;						\
+	efi_status_t __status;						\
+	bool __nmi = in_nmi();						\
+									\
+	if (!__nmi)							\
+		spin_lock_irqsave(&efi_runtime_lock, __flags);		\
+									\
+	__status = (*(f))(args);					\
+									\
+	if (!__nmi)							\
+		spin_unlock_irqrestore(&efi_runtime_lock, __flags);	\
+	__status;							\
+})
 
 #define STUB_GET_TIME(prefix, adjust_arg)				       \
 static efi_status_t							       \
@@ -192,6 +206,21 @@ prefix##_get_next_high_mono_count (u32 *count)				       \
 	return ret;							       \
 }
 
+#define efi_call_reset_phys	efi_call_phys
+#define efi_call_reset_virt(f, args...)					\
+({									\
+	unsigned long __flags;						\
+	bool __nmi = in_nmi();						\
+									\
+	if (__nmi)							\
+		spin_lock_irqsave(&efi_runtime_lock, __flags);		\
+									\
+	(*f)(args);							\
+									\
+	if (__nmi)							\
+		spin_unlock_irqrestore(&efi_runtime_lock, __flags);	\
+})
+
 #define STUB_RESET_SYSTEM(prefix, adjust_arg)				       \
 static void								       \
 prefix##_reset_system (int reset_type, efi_status_t status,		       \
@@ -204,7 +233,7 @@ prefix##_reset_system (int reset_type, efi_status_t status,		       \
 		adata = adjust_arg(data);				       \
 									       \
 	ia64_save_scratch_fpregs(fr);					       \
-	efi_call_##prefix(						       \
+	efi_call_reset_##prefix(				       \
 		(efi_reset_system_t *) __va(runtime->reset_system),	       \
 		reset_type, status, data_size, adata);			       \
 	/* should not return, but just in case... */			       \
