@@ -403,19 +403,16 @@ int __init efi_memblock_x86_reserve_range(void)
 	return 0;
 }
 
-static void __init print_efi_memmap(void)
+static void __init print_efi_memmap(void *map, int nr_map, int md_size)
 {
 #ifdef EFI_DEBUG
 	efi_memory_desc_t *md;
 	void *p;
 	int i;
 
-	for (p = memmap.map, i = 0;
-	     p < memmap.map_end;
-	     p += memmap.desc_size, i++) {
+	for (p = map, i = 0; i < nr_map; p += md_size, i++) {
 		md = p;
-		pr_info("mem%02u: type=%u, attr=0x%llx, "
-			"range=[0x%016llx-0x%016llx) (%lluMB)\n",
+		pr_info("mem%02u: type=%u, attr=0x%llx, range=[0x%016llx-0x%016llx) (%lluMB)\n",
 			i, md->type, md->attribute, md->phys_addr,
 			md->phys_addr + (md->num_pages << EFI_PAGE_SHIFT),
 			(md->num_pages >> (20 - EFI_PAGE_SHIFT)));
@@ -799,7 +796,20 @@ void __init efi_init(void)
 		x86_platform.set_wallclock = efi_set_rtc_mmss;
 	}
 #endif
-	print_efi_memmap();
+	if (efi_setup) {
+		int s;
+		struct efi_setup_data *data;
+
+		s = sizeof(*data) + nr_efi_runtime_map * sizeof(data->map[0]);
+		data = early_memremap(efi_setup, s);
+		if (!data)
+			return;
+		print_efi_memmap(data->map, nr_efi_runtime_map,
+				 sizeof(data->map[0]));
+		early_memunmap(data, s);
+	} else {
+		print_efi_memmap(memmap.map, memmap.nr_map, memmap.desc_size);
+	}
 }
 
 void __init efi_late_init(void)
