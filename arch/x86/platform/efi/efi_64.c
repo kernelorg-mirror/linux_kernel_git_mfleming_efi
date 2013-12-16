@@ -228,3 +228,8 @@ void __iomem *__init efi_ioremap(unsigned long phys_addr, unsigned long size,
 
 	return (void __iomem *)__va(phys_addr);
 }
+
+void __init parse_efi_setup(u64 phys_addr)
+{
+	efi_setup = phys_addr;
+}
