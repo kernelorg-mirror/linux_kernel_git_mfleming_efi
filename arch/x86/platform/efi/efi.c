@@ -77,7 +77,7 @@ static __initdata efi_config_table_type_t arch_tables[] = {
 };
 
 static void *efi_runtime_map;
-static int nr_efi_runtime_map;
+static int nr_efi_runtime_map
 u64 efi_setup; /* efi setup_data physical address */
 
 /*
