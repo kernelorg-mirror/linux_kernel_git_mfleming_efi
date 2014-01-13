@@ -152,8 +152,8 @@ subsys_initcall(efisubsys_init);
 
 /*
  * We can't ioremap data in EFI boot services RAM, because we've already mapped
- * it as RAM.  So, look it up in the existing EFI memory map instead.  Only
- * callable after efi_enter_virtual_mode and before efi_free_boot_services.
+ * it as RAM.  So, look it up in the existing EFI memory map instead. Only
+ * callable before efi_free_boot_services().
  */
 void __iomem *efi_lookup_mapped_addr(u64 phys_addr)
 {

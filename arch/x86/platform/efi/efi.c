@@ -458,7 +458,7 @@ void __init efi_unmap_memmap(void)
 	}
 }
 
-void __init efi_free_boot_services(void)
+static void __init efi_free_boot_services(void)
 {
 	void *p;
 
@@ -697,11 +697,6 @@ void __init efi_init(void)
 	print_efi_memmap();
 }
 
-void __init efi_late_init(void)
-{
-	efi_bgrt_init();
-}
-
 void __init efi_set_executable(efi_memory_desc_t *md, bool executable)
 {
 	u64 addr, npages;
@@ -881,6 +876,8 @@ void __init efi_enter_virtual_mode(void)
 		panic("EFI call to SetVirtualAddressMap() failed!");
 	}
 
+	efi_bgrt_init();
+
 	/*
 	 * Now that EFI is in virtual mode, update the function
 	 * pointers in the runtime service table to the new virtual addresses.
@@ -904,6 +901,8 @@ void __init efi_enter_virtual_mode(void)
 
 	if (efi_enabled(EFI_OLD_MEMMAP) && (__supported_pte_mask & _PAGE_NX))
 		runtime_code_page_mkexec();
+
+	efi_free_boot_services();
 
 	kfree(new_memmap);
 

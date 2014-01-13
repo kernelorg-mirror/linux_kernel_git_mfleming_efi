@@ -632,11 +632,6 @@ asmlinkage void __init start_kernel(void)
 
 	sfi_init_late();
 
-	if (efi_enabled(EFI_RUNTIME_SERVICES)) {
-		efi_late_init();
-		efi_free_boot_services();
-	}
-
 	ftrace_init();
 
 	/* Do the rest non-__init'ed, we're now alive */
