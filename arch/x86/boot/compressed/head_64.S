@@ -213,8 +213,15 @@ ENTRY(efi_pe_entry)
 	pushq	%rsi
 	call	make_boot_params
 	cmpq	$0,%rax
-	je	1f
+	je	fail
 	mov	%rax, %rdx
+
+	call	1f
+1:
+	popq	%rax
+	subq	$1b, %rax
+	movq	BP_code32_start(%rdx)
+
 	popq	%rsi
 	popq	%rdi
 
@@ -223,17 +230,12 @@ ENTRY(efi_stub_entry)
 	movq	%rax,%rsi
 	cmpq	$0,%rax
 	jne	2f
-1:
+fail:
 	/* EFI init failed, so hang. */
 	hlt
-	jmp	1b
+	jmp	fail
 2:
-	call	3f
-3:
-	popq	%rax
-	subq	$3b, %rax
-	subq	BP_pref_address(%rsi), %rax
-	add	BP_code32_start(%esi), %eax
+	movl	BP_code32_start(%esi), %eax
 	leaq	preferred_addr(%rax), %rax
 	jmp	*%rax
 
