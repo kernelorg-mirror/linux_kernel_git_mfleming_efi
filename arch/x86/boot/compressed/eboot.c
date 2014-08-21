@@ -1104,19 +1104,29 @@ struct boot_params *make_boot_params(struct efi_config *c)
 		initrd_addr_max = hdr->initrd_addr_max;
 
 	status = efi_parse_options(cmdline_ptr);
-	if (status != EFI_SUCCESS)
+	if (status != EFI_SUCCESS) {
+		efi_printk(sys_table, "Could not parse EFI options: %m\n", status);
 		goto fail2;
+	}
 
 	status = handle_cmdline_files(sys_table, image,
 				      (char *)(unsigned long)hdr->cmd_line_ptr,
 				      "initrd=", initrd_addr_max,
 				      &ramdisk_addr, &ramdisk_size);
-	if (status != EFI_SUCCESS)
+	if (status != EFI_SUCCESS) {
+		efi_printk(sys_table, "Failed to handle cmdline files: %m\n", status);
 		goto fail2;
+	}
+
 	hdr->ramdisk_image = ramdisk_addr & 0xffffffff;
 	hdr->ramdisk_size  = ramdisk_size & 0xffffffff;
 	boot_params->ext_ramdisk_image = (u64)ramdisk_addr >> 32;
 	boot_params->ext_ramdisk_size  = (u64)ramdisk_size >> 32;
+
+	if (ramdisk_addr)
+		efi_printk_debug(sys_table,
+				 "Loading ramdisk @ 0x%lx (%lu bytes)\n",
+				 ramdisk_addr, ramdisk_size);
 
 	return boot_params;
 fail2:
@@ -1257,6 +1267,8 @@ static efi_status_t alloc_e820ext(u32 nr_desc, struct setup_data **e820ext,
 				size, (void **)e820ext);
 	if (status == EFI_SUCCESS)
 		*e820ext_size = size;
+	else
+		efi_printk(sys_table, "E820 table alloc failed: %m\n", status);
 
 	return status;
 }
@@ -1285,8 +1297,10 @@ get_map:
 	status = efi_get_memory_map(sys_table, &mem_map, &map_sz, &desc_size,
 				    &desc_version, &key);
 
-	if (status != EFI_SUCCESS)
+	if (status != EFI_SUCCESS) {
+		efi_printk(sys_table, "Failed to get memmap: %m\n", status);
 		return status;
+	}
 
 	prev_nr_desc = nr_desc;
 	nr_desc = map_sz / desc_size;
@@ -1326,8 +1340,11 @@ get_map:
 		 * we're guaranteed to exit on repeated failures instead
 		 * of spinning forever.
 		 */
-		if (called_exit)
+		if (called_exit) {
+			efi_printk(sys_table, "ExitBootServices() failed: %m\n",
+				   status);
 			goto free_mem_map;
+		}
 
 		called_exit = true;
 		efi_call_early(free_pool, mem_map);
@@ -1385,7 +1402,7 @@ struct boot_params *efi_main(struct efi_config *c,
 
 	status = setup_efi_pci(boot_params);
 	if (status != EFI_SUCCESS) {
-		efi_printk(sys_table, "setup_efi_pci() failed!\n");
+		efi_printk(sys_table, "setup_efi_pci() failed! %m\n", status);
 	}
 
 	status = efi_call_early(allocate_pool, EFI_LOADER_DATA,
@@ -1417,6 +1434,10 @@ struct boot_params *efi_main(struct efi_config *c,
 			efi_printk(sys_table, "efi_relocate_kernel() failed!\n");
 			goto fail;
 		}
+
+		efi_printk_debug(sys_table,
+				 "Relocating kernel from 0x%lx to 0x%lx\n",
+				 hdr->code32_start, bzimage_addr);
 
 		hdr->pref_address = hdr->code32_start;
 		hdr->code32_start = bzimage_addr;
