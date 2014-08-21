@@ -37,15 +37,9 @@ struct file_info {
 	u64 size;
 };
 
-void efi_printk(efi_system_table_t *sys_table_arg, char *fmt, ...)
+void __efi_printk(efi_system_table_t *sys_table_arg, char *str)
 {
-	va_list args;
-	char str[1024];
 	char *s8;
-
-	va_start(args, fmt);
-	vsprintf(str, fmt, args);
-	va_end(args);
 
 	for (s8 = str; *s8; s8++) {
 		efi_char16_t ch[2] = { 0 };
@@ -58,6 +52,35 @@ void efi_printk(efi_system_table_t *sys_table_arg, char *fmt, ...)
 
 		efi_char16_printk(sys_table_arg, ch);
 	}
+}
+
+static bool __efi_debug = false;
+
+void efi_printk_debug(efi_system_table_t *table, char *fmt, ...)
+{
+	va_list args;
+	char str[1024];
+
+	if (!__efi_debug)
+		return;
+
+	va_start(args, fmt);
+	vsprintf(str, fmt, args);
+	va_end(args);
+
+	__efi_printk(table, str);
+}
+
+void efi_printk(efi_system_table_t *sys_table_arg, char *fmt, ...)
+{
+	va_list args;
+	char str[1024];
+
+	va_start(args, fmt);
+	vsprintf(str, fmt, args);
+	va_end(args);
+
+	__efi_printk(sys_table_arg, str);
 }
 
 efi_status_t efi_get_memory_map(efi_system_table_t *sys_table_arg,
@@ -333,6 +356,9 @@ efi_status_t efi_parse_options(char *cmdline)
 		if (!strncmp(str, "nochunk", 7)) {
 			str += strlen("nochunk");
 			__chunk_size = -1UL;
+		} else if (!strncmp(str, "debug", 5)) {
+			str += strlen("debug");
+			__efi_debug = true;
 		}
 
 		/* Group words together, delimited by "," */

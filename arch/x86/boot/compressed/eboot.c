@@ -1002,8 +1002,11 @@ void setup_graphics(struct boot_params *boot_params)
 					EFI_LOCATE_BY_PROTOCOL,
 					&uga_proto, NULL, &size, uga_handle);
 		if (status == EFI_BUFFER_TOO_SMALL)
-			setup_uga(si, &uga_proto, size);
+			status = setup_uga(si, &uga_proto, size);
 	}
+
+	if (status != EFI_SUCCESS)
+		efi_printk_debug("Failed to setup graphics\n");
 }
 
 /*
