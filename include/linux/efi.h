@@ -1171,7 +1171,7 @@ efi_runtime_map_setup(void *map, int nr_entries, u32 desc_size) {}
 #define pr_efi(sys_table, msg)     efi_printk(sys_table, "EFI stub: "msg)
 #define pr_efi_err(sys_table, msg) efi_printk(sys_table, "EFI stub: ERROR: "msg)
 
-void efi_printk(efi_system_table_t *sys_table_arg, char *str);
+void efi_printk(efi_system_table_t *sys_table_arg, char *str, ...);
 
 void efi_free(efi_system_table_t *sys_table_arg, unsigned long size,
 	      unsigned long addr);

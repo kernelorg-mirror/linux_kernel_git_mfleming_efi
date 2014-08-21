@@ -20,7 +20,7 @@ KBUILD_CFLAGS			:= $(cflags-y) \
 
 GCOV_PROFILE			:= n
 
-lib-y				:= efi-stub-helper.o
+lib-y				:= efi-stub-helper.o vsprintf.o
 lib-$(CONFIG_EFI_ARMSTUB)	+= arm-stub.o fdt.o
 
 CFLAGS_fdt.o			+= -I$(srctree)/scripts/dtc/libfdt/

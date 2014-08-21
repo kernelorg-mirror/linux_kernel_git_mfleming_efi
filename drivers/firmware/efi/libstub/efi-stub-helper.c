@@ -37,9 +37,15 @@ struct file_info {
 	u64 size;
 };
 
-void efi_printk(efi_system_table_t *sys_table_arg, char *str)
+void efi_printk(efi_system_table_t *sys_table_arg, char *fmt, ...)
 {
+	va_list args;
+	char str[1024];
 	char *s8;
+
+	va_start(args, fmt);
+	vsprintf(str, fmt, args);
+	va_end(args);
 
 	for (s8 = str; *s8; s8++) {
 		efi_char16_t ch[2] = { 0 };
