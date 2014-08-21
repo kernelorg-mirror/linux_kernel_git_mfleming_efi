@@ -117,6 +117,20 @@ static char *number(char *str, long num, int base, int size, int precision,
 	return str;
 }
 
+static const char *efi_status_to_str[] = {
+	"EFI_SUCCESS",
+	"EFI_LOAD_ERROR",
+	"EFI_INVALID_PARAMETER",
+	"EFI_UNSUPPORTED",
+	"EFI_BAD_BUFFER_SIZE",
+	"EFI_BUFFER_TOO_SMALL",
+	"EFI_NOT_READY",
+	"EFI_DEVICE_ERROR",
+	"EFI_WRITE_PROTECTED",
+	"EFI_OUT_OF_RESOURCES",
+	"EFI_ERROR",		/* catch all error message */
+};
+
 int vsprintf(char *buf, const char *fmt, va_list args)
 {
 	int len;
@@ -230,6 +244,21 @@ int vsprintf(char *buf, const char *fmt, va_list args)
 			str = number(str,
 				     (unsigned long)va_arg(args, void *), 16,
 				     field_width, precision, flags);
+			continue;
+
+		case 'm':
+			num = va_arg(args, unsigned long);
+
+			/*
+			 * Strip the top bit which is always set for
+			 * error conditions.
+			 */
+			num &= ~(1UL << (BITS_PER_LONG-1));
+
+			if (num >= ARRAY_SIZE(efi_status_to_str))
+				num = ARRAY_SIZE(efi_status_to_str) - 1;
+
+			strcpy(str, efi_status_to_str[num]);
 			continue;
 
 		case 'n':
