@@ -89,6 +89,7 @@ static bool __init efi_virtmap_init(void)
  */
 static int __init arm_enable_runtime_services(void)
 {
+	phys_addr_t phys_map;
 	u64 mapsize;
 
 	if (!efi_enabled(EFI_BOOT)) {
@@ -103,15 +104,15 @@ static int __init arm_enable_runtime_services(void)
 
 	pr_info("Remapping and enabling EFI services.\n");
 
-	mapsize = memmap.map_end - memmap.map;
-	memmap.map = (__force void *)ioremap_cache(memmap.phys_map,
-						   mapsize);
-	if (!memmap.map) {
+	mapsize = efi.memmap.map_end - efi.memmap.map;
+	phys_map = efi.memmap.phys_map;
+
+	efi.memmap.map = (__force void *)ioremap_cache(phys_map, mapsize);
+	if (!efi.memmap.map) {
 		pr_err("Failed to remap EFI memory map\n");
 		return -ENOMEM;
 	}
-	memmap.map_end = memmap.map + mapsize;
-	efi.memmap = &memmap;
+	efi.memmap.map_end = efi.memmap.map + mapsize;
 
 	if (!efi_virtmap_init()) {
 		pr_err("UEFI virtual mapping missing or invalid -- runtime services will not be available\n");
