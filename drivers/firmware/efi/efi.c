@@ -256,7 +256,7 @@ subsys_initcall(efisubsys_init);
  */
 int __init efi_mem_desc_lookup(u64 phys_addr, efi_memory_desc_t *out_md)
 {
-	struct efi_memory_map *map = efi.memmap;
+	struct efi_memory_map *map = &efi.memmap;
 	phys_addr_t p, e;
 
 	if (!efi_enabled(EFI_MEMMAP)) {
@@ -620,16 +620,12 @@ char * __init efi_md_typeattr_format(char *buf, size_t size,
  */
 u64 __weak efi_mem_attributes(unsigned long phys_addr)
 {
-	struct efi_memory_map *map;
 	efi_memory_desc_t *md;
-	void *p;
 
 	if (!efi_enabled(EFI_MEMMAP))
 		return 0;
 
-	map = efi.memmap;
-	for (p = map->map; p < map->map_end; p += map->desc_size) {
-		md = p;
+	for_each_efi_memory_desc(md) {
 		if ((md->phys_addr <= phys_addr) &&
 		    (phys_addr < (md->phys_addr +
 		    (md->num_pages << EFI_PAGE_SHIFT))))
