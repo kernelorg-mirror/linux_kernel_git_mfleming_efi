@@ -805,6 +805,19 @@ static void __init kexec_enter_virtual_mode(void)
 		get_systab_virt_addr(md);
 	}
 
+	/*
+	 * Unregister the early EFI memmap from efi_init() and install
+	 * the new EFI memory map.
+	 */
+	efi_memmap_unmap();
+
+	if (efi_memmap_init_late(efi.memmap.phys_map,
+				 efi.memmap.desc_size * efi.memmap.nr_map)) {
+		pr_err("Failed to remap late EFI memory map\n");
+		clear_bit(EFI_RUNTIME_SERVICES, &efi.flags);
+		return;
+	}
+
 	save_runtime_map();
 
 	BUG_ON(!efi.systab);

@@ -164,17 +164,107 @@ efi_status_t efi_query_variable_store(u32 attributes, unsigned long size,
 EXPORT_SYMBOL_GPL(efi_query_variable_store);
 
 /*
- * The UEFI specification makes it clear that the operating system is free to do
- * whatever it wants with boot services code after ExitBootServices() has been
- * called. Ignoring this recommendation a significant bunch of EFI implementations 
- * continue calling into boot services code (SetVirtualAddressMap). In order to 
- * work around such buggy implementations we reserve boot services region during 
- * EFI init and make sure it stays executable. Then, after SetVirtualAddressMap(), it
-* is discarded.
-*/
+ * The UEFI specification makes it clear that the operating system is
+ * free to do whatever it wants with boot services code after
+ * ExitBootServices() has been called. Ignoring this recommendation a
+ * significant bunch of EFI implementations continue calling into boot
+ * services code (SetVirtualAddressMap). In order to work around such
+ * buggy implementations we reserve boot services region during EFI
+ * init and make sure it stays executable. Then, after
+ * SetVirtualAddressMap(), it is discarded.
+ *
+ * However, some boot services regions contain data that is required
+ * by drivers, so we need to track which memory ranges can never be
+ * freed. This is done using the 'boot_services_map'.
+ *
+ * Any driver that wants to mark a region as reserved must use
+ * efi_mem_reserve() which will insert a new EFI memory descriptor
+ * into 'boot_services_map' and tag it with EFI_MEMORY_KERN_RESERVED.
+ *
+ * EFI_MEMORY_KERN_RESERVED uses an EFI memory attribute bit that is
+ * currently unused by the UEFI specification for tagging non-freeable
+ * regions.
+ *
+ * This memory map is NOT intended to be passed to the firmware,
+ * because setting invalid attribute bits is likely to result in calls
+ * to SetVirtualAddressMap() failing. It is entirely internal to the
+ * kernel and allows us to figure out which regions we need to keep
+ * reserevd and which regions can be freed in
+ * efi_free_boot_services().
+ */
+#define EFI_MEMORY_KERN_RESERVED	((u64)0x4000000000000000ULL)
+
+static struct efi_memory_map boot_services_map;
+
+static bool freed_efi_boot_services;
+
+void efi_arch_mem_reserve(phys_addr_t addr, u64 size)
+{
+	phys_addr_t new_phys, new_size;
+	phys_addr_t old_phys, old_size;
+	struct efi_mem_range mr;
+	efi_memory_desc_t *md;
+	int num_entries;
+	void *new;
+
+	if (WARN_ON(freed_efi_boot_services))
+		return;
+
+	for_each_efi_memory_desc_in_map(&boot_services_map, md) {
+		u64 size, end;
+
+		size = md->num_pages << EFI_PAGE_SHIFT;
+		end = md->phys_addr + size;
+
+		if (addr >= md->phys_addr && addr < end)
+			break;
+	}
+
+	if (!md) {
+		pr_err("Failed to lookup EFI memory descriptor for 0x%016x\n", addr);
+		return;
+	}
+
+	mr.range.start = addr;
+	mr.range.end = addr + size;
+	mr.attribute = md->attribute;
+
+	num_entries = efi_memmap_split_count(md, &mr.range);
+	num_entries += boot_services_map.nr_map;
+
+	new_size = boot_services_map.desc_size * num_entries;
+
+	new_phys = memblock_alloc(new_size, 0);
+	if (!new_phys) {
+		pr_err("Could not allocate boot services memmap\n");
+		return;
+	}
+
+	new = early_memremap(new_phys, new_size);
+	if (!new) {
+		pr_err("Failed to map new boot services memmap\n");
+		return;
+	}
+
+	efi_memmap_insert(&boot_services_map, new, &mr);
+
+	old_phys = boot_services_map.phys_map;
+	old_size = boot_services_map.nr_map * boot_services_map.desc_size;
+
+	early_memunmap(boot_services_map.map, old_size);
+	memblock_free(old_phys, old_size);
+
+	boot_services_map.phys_map = new_phys;
+	boot_services_map.map = new;
+	boot_services_map.map_end = new + new_size;
+	boot_services_map.nr_map = num_entries;
+}
+
 void __init efi_reserve_boot_services(void)
 {
+	phys_addr_t new, new_size;
 	efi_memory_desc_t *md;
+	int num_entries = 0;
 
 	for_each_efi_memory_desc(md) {
 		u64 start = md->phys_addr;
@@ -197,29 +287,159 @@ void __init efi_reserve_boot_services(void)
 			md->num_pages = 0;
 			memblock_dbg("Could not reserve boot range [0x%010llx-0x%010llx]\n",
 				     start, start+size-1);
-		} else
-			memblock_reserve(start, size);
+			continue;
+		}
+
+		memblock_reserve(start, size);
+		num_entries++;
 	}
+
+	/*
+	 * If booting via kexec it's possible to have no boot services
+	 * regions whatsoever in the EFI memmap.
+	 */
+	if (!num_entries)
+		return;
+
+	new_size = efi.memmap.desc_size * num_entries;
+
+	new = memblock_alloc(new_size, 0);
+	if (!new) {
+		pr_err("Could not allocate boot services memmap\n");
+		return;
+	}
+
+	/* Copy everything from the installed memmap */
+	boot_services_map = efi.memmap;
+
+	boot_services_map.map = early_memremap(new, new_size);
+	if (!boot_services_map.map) {
+		pr_err("Could not map boot services memmap\n");
+		return;
+	}
+
+	boot_services_map.map_end = boot_services_map.map + new_size;
+	boot_services_map.nr_map = num_entries;
+	boot_services_map.phys_map = new;
 }
 
 void __init efi_free_boot_services(void)
 {
+	phys_addr_t new_phys, new_size, old_size;
+	struct efi_memory_map_data data;
 	efi_memory_desc_t *md;
+	int num_entries = 0;
+	void *new;
 
-	for_each_efi_memory_desc(md) {
+	if (!boot_services_map.nr_map)
+		return;
+
+	for_each_efi_memory_desc_in_map(&boot_services_map, md) {
 		unsigned long long start = md->phys_addr;
 		unsigned long long size = md->num_pages << EFI_PAGE_SHIFT;
 
-		if (md->type != EFI_BOOT_SERVICES_CODE &&
-		    md->type != EFI_BOOT_SERVICES_DATA)
+		/* Some driver has called efi_mem_reserve() on this region */
+		if (md->attribute & EFI_MEMORY_KERN_RESERVED) {
+			/* While we're here, count reserved regions */
+			num_entries++;
 			continue;
-
-		/* Could not reserve boot area */
-		if (!size)
-			continue;
+		}
 
 		free_bootmem_late(start, size);
 	}
+
+	/*
+	 * Count all non-boot services regions in 'efi.memmap'.
+	 */
+	for_each_efi_memory_desc(md) {
+		if (md->type == EFI_BOOT_SERVICES_CODE ||
+		    md->type == EFI_BOOT_SERVICES_DATA)
+			continue;
+		num_entries++;
+	}
+
+	new_size = efi.memmap.desc_size * num_entries;
+	new_phys = memblock_alloc(new_size, 0);
+	if (!new_phys) {
+		pr_err("Failed to allocate new EFI memmap\n");
+		return;
+	}
+
+	new = early_memremap(new_phys, new_size);
+	if (!new) {
+		pr_err("Failed to map new EFI memmap\n");
+		return;
+	}
+
+	/*
+	 * Build a new EFI memmap that excludes any boot services
+	 * regions that are not marked EFI_MEMORY_KERN_RESERVED, since
+	 * those regions have now been freed.
+	 */
+	for_each_efi_memory_desc(md) {
+		efi_memory_desc_t *bmd;
+		u64 size, end;
+
+		if (md->type != EFI_BOOT_SERVICES_CODE &&
+		    md->type != EFI_BOOT_SERVICES_DATA) {
+			memcpy(new, md, efi.memmap.desc_size);
+			new += efi.memmap.desc_size;
+			continue;
+		}
+
+		/*
+		 * See if we have reserved boot services regions
+		 * within this boot services region.
+		 */
+		size = md->num_pages << EFI_PAGE_SHIFT;
+		end = md->phys_addr + size;
+
+		for_each_efi_memory_desc_in_map(&boot_services_map, bmd) {
+			u64 bsize, bend;
+
+			if (!(bmd->attribute & EFI_MEMORY_KERN_RESERVED))
+				continue;
+
+			bsize = bmd->num_pages << EFI_PAGE_SHIFT;
+			bend = bmd->phys_addr + bsize;
+
+			if (bmd->phys_addr >= md->phys_addr && bend <= end) {
+				/*
+				 * We'll never use 'boot_services_map'
+				 * once this function returns, so
+				 * modifying 'bmd' in-place is safe.
+				 */
+				bmd->attribute &= ~EFI_MEMORY_KERN_RESERVED;
+
+				memcpy(new, bmd, efi.memmap.desc_size);
+				new += efi.memmap.desc_size;
+			}
+		}
+	}
+
+	early_memunmap(new, new_size);
+
+	/* Install our new modified memmap */
+	data.phys_map = new_phys;
+	data.size = new_size;
+	data.desc_version = efi.memmap.desc_version;
+	data.desc_size = efi.memmap.desc_size;
+
+	if (efi_memmap_init(&data)) {
+		pr_err("Could not install new EFI memmap\n");
+		return;
+	}
+
+	old_size = boot_services_map.nr_map * boot_services_map.desc_size;
+	early_memunmap(boot_services_map.map, old_size);
+	memblock_free(boot_services_map.phys_map, old_size);
+
+	/*
+	 * Catch any efi_mem_reserve() calls after this function
+	 * returns since we've already freed everything it is too late
+	 * to reserve anything.
+	 */
+	freed_efi_boot_services = true;
 }
 
 /*
