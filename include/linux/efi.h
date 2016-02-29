@@ -720,6 +720,11 @@ struct efi_memory_map {
 	unsigned long desc_size;
 };
 
+struct efi_mem_range {
+	struct range range;
+	u64 attribute;
+};
+
 struct efi_fdt_params {
 	u64 system_table;
 	u64 mmap;
@@ -937,6 +942,10 @@ extern void __iomem *efi_lookup_mapped_addr(u64 phys_addr);
 extern int __init efi_memmap_init(struct efi_memory_map_data *data);
 extern int __init efi_memmap_init_late(phys_addr_t addr, unsigned long size);
 extern void __init efi_memmap_unmap(void);
+extern int __init efi_memmap_split_count(efi_memory_desc_t *md,
+					 struct range *range);
+extern void __init efi_memmap_insert(struct efi_memory_map *old_memmap,
+				     void *buf, struct efi_mem_range *mem);
 
 extern int efi_config_init(efi_config_table_type_t *arch_tables);
 #ifdef CONFIG_EFI_ESRT
