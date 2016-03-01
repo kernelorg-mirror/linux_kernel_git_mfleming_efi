@@ -126,7 +126,7 @@ static int setup_efi_info_memmap(struct boot_params *params,
 	if (!efi_map_sz)
 		return 0;
 
-	efi_runtime_map_copy(efi_map, efi_map_sz);
+	memcpy(efi_map, efi.memmap.map, efi_map_sz);
 
 	ei->efi_memmap = efi_map_phys_addr & 0xffffffff;
 	ei->efi_memmap_hi = efi_map_phys_addr >> 32;
@@ -184,8 +184,8 @@ setup_efi_state(struct boot_params *params, unsigned long params_load_addr,
 	ei->efi_systab = current_ei->efi_systab;
 	ei->efi_systab_hi = current_ei->efi_systab_hi;
 
-	ei->efi_memdesc_version = current_ei->efi_memdesc_version;
-	ei->efi_memdesc_size = efi_get_runtime_map_desc_size();
+	ei->efi_memdesc_version = efi.memmap.desc_version;
+	ei->efi_memdesc_size = efi.memmap.desc_size;
 
 	setup_efi_info_memmap(params, params_load_addr, efi_map_offset,
 			      efi_map_sz);
@@ -398,7 +398,7 @@ static void *bzImage64_load(struct kimage *image, char *kernel,
 	 * have to create separate segment for each. Keeps things
 	 * little bit simple
 	 */
-	efi_map_sz = efi_get_runtime_map_size();
+	efi_map_sz = efi.memmap.desc_size * efi.memmap.nr_map;
 	efi_map_sz = ALIGN(efi_map_sz, 16);
 	params_cmdline_sz = sizeof(struct boot_params) + cmdline_len +
 				MAX_ELFCOREHDR_STR_LEN;
