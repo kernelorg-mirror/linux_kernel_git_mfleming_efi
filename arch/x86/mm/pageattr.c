@@ -35,7 +35,7 @@ struct cpa_data {
 	pgprot_t	mask_clr;
 	unsigned long	numpages;
 	int		flags;
-	unsigned long	pfn;
+	u64		pfn;
 	unsigned	force_split : 1;
 	int		curpage;
 	struct page	**pages;
