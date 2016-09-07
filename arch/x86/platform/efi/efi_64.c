@@ -658,7 +658,7 @@ efi_thunk_query_variable_info(u32 attr, u64 *storage_space,
 	efi_status_t status;
 	u32 phys_storage, phys_remaining, phys_max;
 
-	if (efi.runtime_version < EFI_2_00_SYSTEM_TABLE_REVISION)
+	if (efi.spec_version < EFI_2_00_SYSTEM_TABLE_REVISION)
 		return EFI_UNSUPPORTED;
 
 	phys_storage = virt_to_phys(storage_space);

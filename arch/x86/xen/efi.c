@@ -56,7 +56,7 @@ static efi_system_table_t efi_systab_xen __initdata = {
 
 static const struct efi efi_xen __initconst = {
 	.systab                   = NULL, /* Initialized later. */
-	.runtime_version	  = 0,    /* Initialized later. */
+	.spec_version		  = 0,    /* Initialized_later. */
 	.mps                      = EFI_INVALID_TABLE_ADDR,
 	.acpi                     = EFI_INVALID_TABLE_ADDR,
 	.acpi20                   = EFI_INVALID_TABLE_ADDR,
@@ -131,7 +131,7 @@ static efi_system_table_t __init *xen_efi_probe(void)
 	op.u.firmware_info.index = XEN_FW_EFI_RT_VERSION;
 
 	if (HYPERVISOR_platform_op(&op) == 0)
-		efi.runtime_version = info->version;
+		efi.spec_version = info->version;
 
 	return &efi_systab_xen;
 }
