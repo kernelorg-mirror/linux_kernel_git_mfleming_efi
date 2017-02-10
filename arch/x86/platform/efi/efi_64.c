@@ -69,16 +69,16 @@ static void __init early_code_mapping_set_exec(int executable)
 	}
 }
 
-pgd_t * __init efi_call_phys_prolog(void)
+union efi_saved_pgd __init efi_call_phys_prolog(void)
 {
 	unsigned long vaddress;
-	pgd_t *save_pgd;
+	union efi_saved_pgd saved_pgd;
 
 	int pgd;
 	int n_pgds;
 
 	if (!efi_enabled(EFI_OLD_MEMMAP)) {
-		save_pgd = (pgd_t *)read_cr3();
+		saved_pgd.cr3 = read_cr3();
 		write_cr3((unsigned long)efi_scratch.efi_pgt);
 		goto out;
 	}
@@ -86,20 +86,21 @@ pgd_t * __init efi_call_phys_prolog(void)
 	early_code_mapping_set_exec(1);
 
 	n_pgds = DIV_ROUND_UP((max_pfn << PAGE_SHIFT), PGDIR_SIZE);
-	save_pgd = kmalloc_array(n_pgds, sizeof(*save_pgd), GFP_KERNEL);
+	saved_pgd.pgd = kmalloc_array(n_pgds, sizeof(*saved_pgd.pgd),
+				      GFP_KERNEL);
 
 	for (pgd = 0; pgd < n_pgds; pgd++) {
-		save_pgd[pgd] = *pgd_offset_k(pgd * PGDIR_SIZE);
+		saved_pgd.pgd[pgd] = *pgd_offset_k(pgd * PGDIR_SIZE);
 		vaddress = (unsigned long)__va(pgd * PGDIR_SIZE);
 		set_pgd(pgd_offset_k(pgd * PGDIR_SIZE), *pgd_offset_k(vaddress));
 	}
 out:
 	__flush_tlb_all();
 
-	return save_pgd;
+	return saved_pgd;
 }
 
-void __init efi_call_phys_epilog(pgd_t *save_pgd)
+void __init efi_call_phys_epilog(union efi_saved_pgd saved_pgd)
 {
 	/*
 	 * After the lock is released, the original page table is restored.
@@ -108,7 +109,7 @@ void __init efi_call_phys_epilog(pgd_t *save_pgd)
 	int nr_pgds;
 
 	if (!efi_enabled(EFI_OLD_MEMMAP)) {
-		write_cr3((unsigned long)save_pgd);
+		write_cr3(saved_pgd.cr3);
 		__flush_tlb_all();
 		return;
 	}
@@ -116,9 +117,10 @@ void __init efi_call_phys_epilog(pgd_t *save_pgd)
 	nr_pgds = DIV_ROUND_UP((max_pfn << PAGE_SHIFT) , PGDIR_SIZE);
 
 	for (pgd_idx = 0; pgd_idx < nr_pgds; pgd_idx++)
-		set_pgd(pgd_offset_k(pgd_idx * PGDIR_SIZE), save_pgd[pgd_idx]);
+		set_pgd(pgd_offset_k(pgd_idx * PGDIR_SIZE),
+			saved_pgd.pgd[pgd_idx]);
 
-	kfree(save_pgd);
+	kfree(saved_pgd.pgd);
 
 	__flush_tlb_all();
 	early_code_mapping_set_exec(0);

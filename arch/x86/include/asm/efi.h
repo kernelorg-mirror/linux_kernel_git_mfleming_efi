@@ -111,11 +111,24 @@ extern void __iomem *__init efi_ioremap(unsigned long addr, unsigned long size,
 
 #endif /* CONFIG_X86_32 */
 
+union efi_saved_pgd {
+	/*
+	 * If !EFI_OLD_MEMMAP or we're 32-bit, this is a verbatim saved CR3
+	 * value.
+	 */
+	unsigned long cr3;
+
+#ifdef CONFIG_X86_64
+	/* If EFI_OLD_MEMMAP, this is a kmalloced copy of the pgd. */
+	pgd_t *pgd;
+#endif
+};
+
 extern struct efi_scratch efi_scratch;
 extern void __init efi_set_executable(efi_memory_desc_t *md, bool executable);
 extern int __init efi_memblock_x86_reserve_range(void);
-extern pgd_t * __init efi_call_phys_prolog(void);
-extern void __init efi_call_phys_epilog(pgd_t *save_pgd);
+extern union efi_saved_pgd __init efi_call_phys_prolog(void);
+extern void __init efi_call_phys_epilog(union efi_saved_pgd saved_pgd);
 extern void __init efi_print_memmap(void);
 extern void __init efi_memory_uc(u64 addr, unsigned long size);
 extern void __init efi_map_region(efi_memory_desc_t *md);

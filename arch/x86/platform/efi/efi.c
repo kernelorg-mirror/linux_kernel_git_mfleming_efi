@@ -81,9 +81,9 @@ static efi_status_t __init phys_efi_set_virtual_address_map(
 {
 	efi_status_t status;
 	unsigned long flags;
-	pgd_t *save_pgd;
+	union efi_saved_pgd saved_pgd;
 
-	save_pgd = efi_call_phys_prolog();
+	saved_pgd = efi_call_phys_prolog();
 
 	/* Disable interrupts around EFI calls: */
 	local_irq_save(flags);
@@ -92,7 +92,7 @@ static efi_status_t __init phys_efi_set_virtual_address_map(
 			       descriptor_version, virtual_map);
 	local_irq_restore(flags);
 
-	efi_call_phys_epilog(save_pgd);
+	efi_call_phys_epilog(saved_pgd);
 
 	return status;
 }
